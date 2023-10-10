@@ -27,13 +27,13 @@ import textwrap
 import matplotlib.pyplot as plt
 matplotlib.use("Agg")
 
-__author__ = "Your Name"
+__author__ = "Hamza Mesnaoui"
 __copyright__ = "Universite Paris Diderot"
-__credits__ = ["Your Name"]
+__credits__ = ["Hamza Mesnaoui"]
 __license__ = "GPL"
 __version__ = "1.0.0"
 __maintainer__ = "Your Name"
-__email__ = "your@email.fr"
+__email__ = "hamzamesnaoui1@gmail.com"
 __status__ = "Developpement"
 
 def isfile(path): # pragma: no cover
@@ -81,7 +81,11 @@ def read_fastq(fastq_file):
     :param fastq_file: (str) Path to the fastq file.
     :return: A generator object that iterate the read sequences. 
     """
-    pass
+    with open(fastq_file, 'r') as file:
+        for line in file:
+            yield next(file).strip()
+            next(file)
+            next(file)
 
 
 def cut_kmer(read, kmer_size):
@@ -90,7 +94,11 @@ def cut_kmer(read, kmer_size):
     :param read: (str) Sequence of a read.
     :return: A generator object that iterate the kmers of of size kmer_size.
     """
-    pass
+    read_length = len(read)
+    for i in range(read_length - kmer_size + 1):
+        kmer = read[i:i + kmer_size]
+        #print(kmer)
+        yield kmer
 
 
 def build_kmer_dict(fastq_file, kmer_size):
@@ -99,7 +107,21 @@ def build_kmer_dict(fastq_file, kmer_size):
     :param fastq_file: (str) Path to the fastq file.
     :return: A dictionnary object that identify all kmer occurrences.
     """
-    pass
+    kmer_dict = {}
+
+    read_sequences = read_fastq(fastq_file)
+
+    for sequence in read_sequences:
+
+        kmer_generator = cut_kmer(sequence, kmer_size)
+    
+        for kmer in kmer_generator:
+            if kmer in kmer_dict:
+                kmer_dict[kmer] += 1
+            else:
+                kmer_dict[kmer] = 1
+    print(kmer_dict)
+    return kmer_dict
 
 
 def build_graph(kmer_dict):
@@ -108,7 +130,12 @@ def build_graph(kmer_dict):
     :param kmer_dict: A dictionnary object that identify all kmer occurrences.
     :return: A directed graph (nx) of all kmer substring and weight (occurrence).
     """
-    pass
+    graph = nx.DiGraph()
+    for kmer, occurrence in kmer_dict.items():
+        prefix = kmer[:-1]
+        suffix = kmer[1:]
+        graph.add_edge(prefix, suffix, weight=occurrence)
+    return graph
 
 
 def remove_paths(graph, path_list, delete_entry_node, delete_sink_node):
@@ -121,7 +148,19 @@ def remove_paths(graph, path_list, delete_entry_node, delete_sink_node):
     :param delete_sink_node: (boolean) True->We remove the last node of a path
     :return: (nx.DiGraph) A directed graph object
     """
-    pass
+    #modified_graph = graph.copy()
+    for path in path_list:
+        if delete_entry_node and delete_sink_node:
+            graph.remove_nodes_from(path)
+        elif delete_entry_node:
+            graph.remove_nodes_from(path[:-1])
+            # Remove the first node
+        elif delete_sink_node:
+            graph.remove_nodes_from(path[1:])
+            # Remove the last node
+        else:
+            graph.remove_nodes_from(path[1:-1])
+    return graph
 
 
 def select_best_path(graph, path_list, path_length, weight_avg_list, 
@@ -136,7 +175,23 @@ def select_best_path(graph, path_list, path_length, weight_avg_list,
     :param delete_sink_node: (boolean) True->We remove the last node of a path
     :return: (nx.DiGraph) A directed graph object
     """
-    pass
+    best_path = None
+    best_score = None
+    path_length_list = []
+    for i, path in enumerate(path_list):
+        if delete_entry_node and delete_sink_node:
+            graph.remove_nodes_from(path)
+        elif delete_entry_node:
+            graph.remove_nodes_from(path[:-1])
+                # Remove the first node
+        elif delete_sink_node:
+            graph.remove_nodes_from(path[1:])
+                # Remove the last node
+        score = path_length_list[i] * weight_avg_list[i]
+        if best_path is None or score > best_score:
+            best_path = path
+            best_score = score
+    return best_path
 
 def path_average_weight(graph, path):
     """Compute the weight of a path
@@ -248,7 +303,11 @@ def main(): # pragma: no cover
     """
     # Get arguments
     args = get_arguments()
-
+    for a in  read_fastq(args.fastq_file):
+        print(list(cut_kmer(a, 4)))
+    build_kmer_dict(args.fastq_file, 4)
+    build_graph(build_kmer_dict(args.fastq_file, 4))
+    #remove_paths(build_graph(build_kmer_dict(args.fastq_file, 4)), path_list, delete_entry_node, delete_sink_node)
     # Fonctions de dessin du graphe
     # A decommenter si vous souhaitez visualiser un petit 
     # graphe
