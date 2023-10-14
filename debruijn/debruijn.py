@@ -175,7 +175,7 @@ def select_best_path(graph, path_list, path_length, weight_avg_list,
     :param delete_sink_node: (boolean) True->We remove the last node of a path
     :return: (nx.DiGraph) A directed graph object
     """
-    weight_stdev = statistics.stdev(weight_avg_list)
+    '''weight_stdev = statistics.stdev(weight_avg_list)
     if weight_stdev > 0:
         best_path_index = weight_avg_list.index(max(weight_avg_list))
         del path_list[best_path_index]
@@ -188,7 +188,30 @@ def select_best_path(graph, path_list, path_length, weight_avg_list,
             best_path_index = random.randint(0, len(path_list) - 1)
             del path_list[best_path_index]
 
-    return remove_paths(graph, path_list, delete_entry_node, delete_sink_node)
+    return remove_paths(graph, path_list, delete_entry_node, delete_sink_node)'''
+
+    if not path_list:
+        return graph  # Aucun chemin à sélectionner, retournez le graphe tel quel
+
+    if len(path_list) == 1:
+        return graph  # Il n'y a qu'un seul chemin, retournez le graphe tel quel
+
+    std_weight = statistics.stdev(weight_avg_list)
+    std_length = statistics.stdev(path_length)
+
+    if std_weight > 0:
+        # Sélectionnez le chemin avec le poids moyen le plus élevé
+        num_best_path = weight_avg_list.index(max(weight_avg_list))
+    elif std_length > 0:
+        # Sélectionnez le chemin avec la longueur maximale
+        num_best_path = path_length.index(max(path_length))
+    else:
+        # Choisissez aléatoirement un chemin
+        num_best_path = random.randint(0, len(path_list) - 1)
+
+    del path_list[num_best_path]
+    graph = remove_paths(graph, path_list, delete_entry_node, delete_sink_node)
+    return graph
 
 def path_average_weight(graph, path):
     """Compute the weight of a path
@@ -326,26 +349,33 @@ def get_contigs(graph, starting_nodes, ending_nodes):
     :return: (list) List of [contiguous sequence and their length]
     """
     contigs = []
-    for st_node in starting_nodes:
+    
+    for start_node in starting_nodes:
         for end_node in ending_nodes:
-            all_paths = nx.all_simple_paths(graph, source=st_node, target=end_node)
-            for path in all_paths:
-                sequ = ''.join(k_mer[1] for k_mer in path)
-                contigs.append((sequ, len(path) + 1))
+            if nx.has_path(graph, start_node, end_node):
+                for path in nx.all_simple_paths(graph, start_node, end_node):
+                    contig = path[0]  # Le premier nœud d'entrée
+                    for node in path[1:]:
+                        contig += node[-1]  # Ajouter le dernier nucléotide du nœud
+                    contig_length = len(contig)
+                    contigs.append((contig, contig_length))
+    
     return contigs
 
+   
 def save_contigs(contigs_list, output_file):
     """Write all contigs in fasta format
 
     :param contig_list: (list) List of [contiguous sequence and their length]
     :param output_file: (str) Path to the output file
     """
-    with open(output_file, "w") as f_out:
-        for i, (contig, length) in enumerate(contigs_list):
-            header = f">contig_{i} len={length}\n"
-            formatted_contig = textwrap.fill(contig, width=80) + "\n"
-            f_out.write(header + formatted_contig)
 
+    with open(output_file, 'w') as file:  # Open the file in write mode ('w')
+        for i, (sequence, length) in enumerate(contigs_list):
+            # Create a FASTA entry for the current contig
+            header = f">Contig_{i + 1} Length={length}\n"
+            file.write(header)
+            file.write(sequence + '\n')
 
 def draw_graph(graph, graphimg_file): # pragma: no cover
     """Draw the graph
@@ -379,10 +409,13 @@ def main(): # pragma: no cover
     """
     # Get arguments
     args = get_arguments()
-    for a in  read_fastq(args.fastq_file):
-        print(list(cut_kmer(a, 4)))
-    build_kmer_dict(args.fastq_file, 4)
-    build_graph(build_kmer_dict(args.fastq_file, 4))
+    '''for a in  read_fastq(args.fastq_file):
+        print(list(cut_kmer(a, 4)))'''
+    dict_reads = build_kmer_dict(args.fastq_file, args.kmer_size)
+    graph = build_graph(dict_reads)
+    graph = simplify_bubbles(graph)
+    graph = solve_entry_tips(graph, get_starting_nodes(graph))
+    graph = solve_out_tips(graph, get_sink_nodes(graph))
     #remove_paths(build_graph(build_kmer_dict(args.fastq_file, 4)), path_list, delete_entry_node, delete_sink_node)
     # Fonctions de dessin du graphe
     # A decommenter si vous souhaitez visualiser un petit 
@@ -390,6 +423,11 @@ def main(): # pragma: no cover
     # Plot the graph
     # if args.graphimg_file:
     #     draw_graph(graph, args.graphimg_file)
+    # Resolve bubbles and get the paths to remove
+    
+    L_contigs = get_contigs(graph, get_starting_nodes(graph), get_sink_nodes(graph))
+    save_contigs(L_contigs, args.output_file)
+
 
 
 if __name__ == '__main__': # pragma: no cover
